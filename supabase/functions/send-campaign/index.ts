@@ -13,7 +13,7 @@ import { createClient, SupabaseClient } from 'npm:@supabase/supabase-js@2';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const RESEND_KEY = Deno.env.get('RESEND_API_KEY')!;
+const RESEND_KEY = Deno.env.get('RESEND_API_KEY') || '';
 const SITE_URL = (Deno.env.get('SITE_URL') || 'https://www.aimoc.com.au').replace(/\/$/, '');
 const CRON_SECRET = Deno.env.get('CRON_SECRET') || '';
 const BATCH = 100;           // Resend batch limit
@@ -90,6 +90,7 @@ function fromLine(s: Settings) {
 }
 
 async function resendBatch(emails: unknown[]) {
+  if (!RESEND_KEY) throw new Error('Email sending is not configured (RESEND_API_KEY missing).');
   const res = await fetch('https://api.resend.com/emails/batch', {
     method: 'POST',
     headers: { Authorization: `Bearer ${RESEND_KEY}`, 'Content-Type': 'application/json' },
@@ -165,7 +166,11 @@ Deno.serve(async req => {
 
   // ---------- scheduled sends (cron) ----------
   if (body.run_scheduled) {
-    if (!CRON_SECRET || req.headers.get('x-cron-secret') !== CRON_SECRET) return json({ error: 'Forbidden' }, 403);
+    // accept either the CRON_SECRET env secret or the one stored in Supabase Vault (used by pg_cron)
+    const given = req.headers.get('x-cron-secret') || '';
+    let ok = !!CRON_SECRET && given === CRON_SECRET;
+    if (!ok && given) { const { data } = await db.rpc('cron_secret_ok', { p: given }); ok = data === true; }
+    if (!ok) return json({ error: 'Forbidden' }, 403);
     const { data: due } = await db.from('campaigns').select('*').eq('status', 'scheduled').lte('scheduled_at', new Date().toISOString());
     const results = [];
     for (const c of due || []) {
