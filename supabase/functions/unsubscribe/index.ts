@@ -7,7 +7,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, { auth: { persistSession: false } });
-const SITE_URL = (Deno.env.get('SITE_URL') || '').replace(/\/$/, '');
+const SITE_URL = (Deno.env.get('SITE_URL') || 'https://www.aimoc.com.au').replace(/\/$/, '');
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 Deno.serve(async req => {

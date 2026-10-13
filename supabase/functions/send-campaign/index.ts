@@ -14,7 +14,7 @@ import { createClient, SupabaseClient } from 'npm:@supabase/supabase-js@2';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const RESEND_KEY = Deno.env.get('RESEND_API_KEY')!;
-const SITE_URL = (Deno.env.get('SITE_URL') || '').replace(/\/$/, '');
+const SITE_URL = (Deno.env.get('SITE_URL') || 'https://www.aimoc.com.au').replace(/\/$/, '');
 const CRON_SECRET = Deno.env.get('CRON_SECRET') || '';
 const BATCH = 100;           // Resend batch limit
 const PAUSE_MS = 600;        // stay under Resend's default 2 requests/second
