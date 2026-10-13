@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Australian Independent Motorsport Operators Council</title>
+<meta name="description" content="AIMOC — a national, independent voice for Australian motorsport organisations: sanctioning bodies, clubs, circuits, venues, promoters and organisers.">
+<meta name="theme-color" content="#0B0D0F">
+<link rel="icon" type="image/svg+xml" href="assets/aimoc-icon-dark.svg">
+<meta property="og:image" content="assets/social-card.png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<a class="sr-only" href="#app">Skip to content</a>
+<div class="topbar"></div>
+<header class="site">
+  <div class="wrap hdr">
+    <a class="brand" href="#/">
+      <img class="brand-logo" src="assets/aimoc-logo-reversed.svg" alt="AIMOC — Australian Independent Motorsport Operators Council" width="150" height="54">
+      <span class="sr-only"><span id="brand-short">AIMOC</span> <span id="brand-long"></span></span>
+    </a>
+    <nav id="nav" aria-label="Main"></nav>
+    <div id="acct"></div>
+    <button class="navtoggle" id="navToggle" type="button" aria-label="Menu">Menu</button>
+  </div>
+</header>
+
+<main id="app" tabindex="-1"><div class="loading">Loading…</div></main>
+
+<footer class="site"><div class="wrap" id="footer"></div></footer>
+<div id="printArea"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/core.js"></script>
+<script src="js/public.js"></script>
+<script src="js/register.js"></script>
+<script src="js/admin.js"></script>
+<script src="js/comms.js"></script>
+<script src="js/reports.js"></script>
+<script>init();</script>
+</body>
+</html>

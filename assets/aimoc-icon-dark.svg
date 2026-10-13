@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="AIMOC">
+<rect width="256" height="256" rx="40" fill="#0B0D0F"/>
+<path fill="#FFFFFF" d="M88 92 C120 74 158 66 206 64 L204 68 C162 72 126 80 92 96Z"/>
+<path fill="#FFC400" d="M106 104 L138 104 L66 196 L30 196Z"/>
+<path fill="#FFFFFF" d="M92 166 L136 166 L128 196 L72 196Z"/>
+<path fill="#FFFFFF" d="M142 170 L170 170 L162 190 L134 190Z"/>
+<path fill="#FFC400" d="M146 112 L176 110 L166 130 L136 132Z M186 110 L216 108 L206 128 L176 130Z M126 140 L156 138 L146 158 L116 160Z M166 138 L196 136 L186 156 L156 158Z"/>
+</svg>

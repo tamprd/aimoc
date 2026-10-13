@@ -1,0 +1,15 @@
+<!-- Paste into Supabase → Authentication → Email Templates, for BOTH "Magic Link" and "Confirm signup".
+     Replace https://YOUR-SITE with your live site address (so the logo loads).
+     Suggested subjects:  Magic Link → "Your AIMOC log-in link"   Confirm signup → "Verify your email for AIMOC" -->
+<div style="background:#F3F4F5;padding:32px 12px;font-family:Arial,Helvetica,sans-serif">
+  <div style="max-width:520px;margin:0 auto;background:#ffffff;border:1px solid #D9DDE2;border-radius:10px;overflow:hidden">
+    <div style="background:#0B0D0F;padding:16px 24px"><img src="https://YOUR-SITE/assets/email-logo.png" width="150" alt="AIMOC" style="display:block;border:0;height:auto"></div>
+    <div style="height:4px;background:#FFC400;line-height:4px;font-size:0">&nbsp;</div>
+    <div style="padding:28px 24px;color:#1B1F24">
+      <h1 style="margin:0 0 12px;font-size:22px;text-transform:uppercase;letter-spacing:-0.5px">Your secure link</h1>
+      <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#5E6670">Tap the button to continue to the Australian Independent Motorsport Operators Council. No password needed.</p>
+      <a href="{{ .ConfirmationURL }}" style="display:inline-block;background:#FFC400;color:#0B0D0F;text-decoration:none;font-weight:bold;padding:14px 28px;border-radius:50px">Continue to AIMOC</a>
+      <p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:#5E6670">This link expires in 1 hour and works once. If you didn't request it, you can ignore this email.</p>
+    </div>
+  </div>
+</div>
