@@ -60,7 +60,7 @@ function buildEmail(c: Campaign, s: Settings, r: Recipient) {
 ${c.preheader ? `<div style="display:none;max-height:0;overflow:hidden">${esc(c.preheader)}</div>` : ''}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
 <table role="presentation" width="620" cellpadding="0" cellspacing="0" style="max-width:620px;width:100%;background:#ffffff;border:1px solid #D9DDE2;border-radius:8px;overflow:hidden">
-<tr><td style="background:#0B0D0F;padding:16px 24px"><img src="${SITE_URL}/assets/email-logo.png" width="150" alt="${esc(s.short_name || 'AIMOC')}" style="display:block;border:0;height:auto"></td></tr>
+<tr><td style="background:#0B0D0F;padding:16px 24px"><img src="${SITE_URL}/assets/email-logo.png" width="200" height="72" alt="${esc(s.short_name || 'AIMOC')}" style="display:block;border:0;width:200px;height:72px"></td></tr>
 <tr><td style="height:4px;line-height:4px;font-size:0;background:#FFC400">&nbsp;</td></tr>
 <tr><td style="padding:24px;font-size:15px;line-height:1.6;color:#1B1F24">${body}
 ${attachments.length ? `<p style="margin-top:20px"><strong>Attachments</strong><br>${attachments.map(a => `&#128206; <a href="${esc(a.url)}" style="color:#0B0D0F">${esc(a.name)}</a>`).join('<br>')}</p>` : ''}

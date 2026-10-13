@@ -274,7 +274,7 @@ function emailPreviewHtml(d) {
   const sample = { '{{first_name}}': 'Alex', '{{full_name}}': 'Alex Example', '{{org_name}}': 'Example Motorsport Club Inc' };
   const body = Object.entries(sample).reduce((h, [k, v]) => h.split(k).join(esc(v)), d.body_html);
   return `<div style="max-width:620px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;border:1px solid #dfe4ea;font-family:Arial,sans-serif">
-    <div style="background:#0B0D0F;padding:16px 24px"><img src="assets/email-logo.png" width="150" alt="AIMOC" style="display:block"></div>
+    <div style="background:#0B0D0F;padding:16px 24px"><img src="assets/email-logo.png" width="200" height="72" alt="AIMOC" style="display:block"></div>
     <div style="height:4px;background:#FFC400"></div>
     <div style="padding:24px;font-size:15px;line-height:1.6;color:#1B1F24">${body}
       ${d.attachments?.length ? `<p><strong>Attachments</strong><br>${d.attachments.map(a => `📎 <a href="${safeUrl(a.url)}">${esc(a.name)}</a>`).join('<br>')}</p>` : ''}</div>
