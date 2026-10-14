@@ -260,3 +260,23 @@ create policy "position responses read" on public.position_responses for select 
 revoke all on function public.guard_position(), public.snapshot_position_version() from public, anon, authenticated;
 revoke all on function public.open_position(uuid), public.respond_to_position(uuid,uuid,text,text), public.position_results(uuid) from public, anon;
 grant execute on function public.open_position(uuid), public.respond_to_position(uuid,uuid,text,text), public.position_results(uuid) to authenticated;
+
+-- ---------- automation ----------
+-- Close open positions whose review period has ended (run by pg_cron every 5 minutes).
+create or replace function public.close_due_positions() returns int
+language plpgsql security definer set search_path = public as $$
+declare n int;
+begin
+  update council_positions set status = 'closed', closed_at = closes_at
+  where status = 'open' and closes_at < now();
+  get diagnostics n = row_count;
+  return n;
+end $$;
+revoke all on function public.close_due_positions() from public, anon, authenticated;
+
+do $$ begin
+  if exists (select 1 from pg_extension where extname = 'pg_cron') then
+    perform cron.unschedule('aimoc-close-positions') where exists (select 1 from cron.job where jobname = 'aimoc-close-positions');
+    perform cron.schedule('aimoc-close-positions', '*/5 * * * *', 'select public.close_due_positions()');
+  end if;
+end $$;
