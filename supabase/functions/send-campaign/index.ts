@@ -155,6 +155,76 @@ async function sendCampaign(db: SupabaseClient, c: Campaign, s: Settings, actor:
   return { sent, failed };
 }
 
+/* ---------- Council positions: review notice + reminder ---------- */
+const SENT_OK = ['sent', 'delivered', 'opened', 'clicked', 'delayed'];
+const fmtBris = (iso: string) => new Date(iso).toLocaleString('en-AU', { timeZone: 'Australia/Brisbane', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+async function positionMail(db: SupabaseClient, s: Settings, pid: string, kind: 'notice' | 'reminder', actor: string | null) {
+  const { data: p } = await db.from('council_positions').select('*').eq('id', pid).maybeSingle();
+  if (!p) throw new Error('Position not found.');
+  if (p.status !== 'open' || new Date(p.closes_at) <= new Date()) throw new Error('This position is not open for review.');
+  const { data: recips } = await db.from('position_recipients').select('org_id,notified_at').eq('position_id', pid);
+  let orgIds: string[];
+  if (kind === 'notice') {
+    orgIds = (recips || []).filter(r => !r.notified_at).map(r => r.org_id);
+  } else {
+    const { data: resp } = await db.from('position_response_current').select('org_id,response').eq('position_id', pid);
+    const answered = new Set((resp || []).filter(r => r.response !== 'withdrawn').map(r => r.org_id));
+    orgIds = (recips || []).map(r => r.org_id).filter(o => !answered.has(o));
+  }
+  if (!orgIds.length) {
+    if (kind === 'reminder') await db.from('council_positions').update({ reminder_sent_at: new Date().toISOString() }).eq('id', pid);
+    return { sent: 0, failed: 0, nothing_to_send: true };
+  }
+
+  const closes = fmtBris(p.closes_at);
+  const link = `${SITE_URL}/#/portal/position/${p.id}`;
+  const title = esc(p.title);
+  const body_html = (kind === 'notice'
+    ? `<p>Hi {{first_name}},</p>
+<p>The Council has prepared a position for review and would like {{org_name}}'s response.</p>
+<h2 style="font-size:18px;margin:16px 0 4px">${title}</h2>${p.jurisdiction ? `<p style="margin:0;color:#5E6670">${esc(p.jurisdiction)}</p>` : ''}
+${p.summary ? `<p>${esc(p.summary)}</p>` : ''}`
+    : `<p>Hi {{first_name}},</p>
+<p>This is a reminder that the review period for the Council position below closes soon, and we don't yet have a response from {{org_name}}.</p>
+<h2 style="font-size:18px;margin:16px 0 4px">${title}</h2>`)
+    + `<p><strong>Review closes: ${esc(closes)} (Brisbane time).</strong></p>
+<p>Please choose one of the following:</p>
+<ul><li><strong>Endorse</strong> — your organisation may be listed as supporting this position.</li>
+<li><strong>Opt out</strong> — your organisation will not be listed as supporting it.</li></ul>
+<p>If we receive no response, <strong>no endorsement will be recorded</strong>. Silence is not treated as endorsement.</p>
+<p style="margin:24px 0"><a href="${link}" style="display:inline-block;background:#FFC400;color:#0B0D0F;text-decoration:none;font-weight:bold;padding:12px 24px;border-radius:50px">Read the position &amp; respond</a></p>
+<p style="font-size:13px;color:#5E6670">Only your organisation's administrator or an authorised representative can respond. Log in with this email address to continue.</p>`;
+
+  const subject = kind === 'notice'
+    ? `For review: ${p.title} — respond by ${new Date(p.closes_at).toLocaleDateString('en-AU', { timeZone: 'Australia/Brisbane', day: 'numeric', month: 'short' })}`
+    : `Reminder: ${p.title} — review closes ${new Date(p.closes_at).toLocaleDateString('en-AU', { timeZone: 'Australia/Brisbane', weekday: 'long', day: 'numeric', month: 'short' })}`;
+
+  const { data: c, error } = await db.from('campaigns').insert({
+    name: `${kind === 'notice' ? 'Position notice' : 'Position reminder'}: ${p.title}`.slice(0, 200), subject: subject.slice(0, 200),
+    body_html, category: 'council', audience: { org_ids: orgIds }, position_id: p.id,
+    purpose: kind === 'notice' ? 'position_notice' : 'position_reminder', status: 'sending', created_by: actor,
+  }).select('*').single();
+  if (error) throw error;
+  let result;
+  try { result = await sendCampaign(db, c, s, actor); }
+  catch (e) {
+    await db.from('campaigns').update({ status: 'failed', error: (e as Error).message }).eq('id', c.id);
+    if (kind === 'reminder') await db.from('council_positions').update({ reminder_sent_at: new Date().toISOString() }).eq('id', pid);
+    throw e;
+  }
+
+  const { data: okRows } = await db.from('campaign_recipients').select('org_id').eq('campaign_id', c.id).in('status', SENT_OK);
+  const okOrgs = [...new Set((okRows || []).map(r => r.org_id).filter(Boolean))];
+  const now = new Date().toISOString();
+  if (okOrgs.length) {
+    if (kind === 'notice') await db.from('position_recipients').update({ notified_at: now }).eq('position_id', pid).in('org_id', okOrgs).is('notified_at', null);
+    else await db.from('position_recipients').update({ reminded_at: now }).eq('position_id', pid).in('org_id', okOrgs);
+  }
+  if (kind === 'reminder') await db.from('council_positions').update({ reminder_sent_at: now }).eq('id', pid);
+  return { ...result, organisations: okOrgs.length, organisations_asked: orgIds.length, campaign_id: c.id };
+}
+
 Deno.serve(async req => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
@@ -182,6 +252,14 @@ Deno.serve(async req => {
         results.push({ id: c.id, error: (e as Error).message });
       }
     }
+    // position reminders: from 9am Brisbane on the last business day (closes 23:59:59) to non-responders
+    const soon = new Date(Date.now() + 15 * 3600e3).toISOString();
+    const { data: dueP } = await db.from('council_positions').select('id').eq('status', 'open').is('reminder_sent_at', null)
+      .lte('closes_at', soon).gt('closes_at', new Date().toISOString());
+    for (const p of dueP || []) {
+      try { results.push({ position: p.id, reminder: await positionMail(db, s, p.id, 'reminder', null) }); }
+      catch (e) { results.push({ position: p.id, error: (e as Error).message }); }
+    }
     return json({ ok: true, results });
   }
 
@@ -192,6 +270,17 @@ Deno.serve(async req => {
   const { data: staff } = await db.from('staff').select('role,active').eq('user_id', user.id).eq('active', true).maybeSingle();
   if (!staff) return json({ error: 'Council staff only.' }, 403);
   if (s.require_admin_mfa && jwtClaims(token).aal !== 'aal2') return json({ error: 'Two-step verification required.' }, 403);
+
+  // Council position notice / reminder (Council Administrators only)
+  if (body.position_id) {
+    if (!['super_admin', 'council_admin'].includes(staff.role)) return json({ error: 'Only a Council Administrator can send position notices.' }, 403);
+    if (!['notice', 'reminder'].includes(body.kind)) return json({ error: 'Invalid request.' }, 400);
+    try {
+      const r = await positionMail(db, s, String(body.position_id), body.kind, user.id);
+      await db.from('audit_log').insert({ actor: user.id, actor_email: user.email, action: 'position_' + body.kind, entity: 'council_positions', entity_id: body.position_id, changes: r });
+      return json({ ok: true, ...r });
+    } catch (e) { return json({ error: (e as Error).message }, 400); }
+  }
 
   const { data: c } = await db.from('campaigns').select('*').eq('id', body.campaign_id).maybeSingle();
   if (!c) return json({ error: 'Communication not found.' }, 404);

@@ -80,6 +80,7 @@ function adminShell(active, inner) {
       ${item('dash', '#/admin', 'Dashboard')}
       ${item('orgs', '#/admin/orgs', 'Organisations', adminCounts.orgs)}
       ${item('comms', '#/admin/comms', 'Communications', adminCounts.comms)}
+      ${item('positions', '#/admin/positions', 'Council positions')}
       ${item('reports', '#/admin/reports', 'Reports')}
       ${item('content', '#/admin/content', 'Website content', 0, ADM)}
       ${item('enq', '#/admin/enquiries', 'Enquiries', adminCounts.enq)}

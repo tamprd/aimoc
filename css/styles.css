@@ -441,3 +441,11 @@ body.admin-mode { background: var(--bg-soft); }
 .cta-band { background: linear-gradient(90deg, rgba(11,13,15,.95) 45%, rgba(11,13,15,.6)), url('../assets/photos/banner-kerb.jpg') center 55% / cover; }
 .hero .wrap { position: relative; z-index: 1; }
 .btn { white-space: nowrap; }
+
+/* ---------- Council positions ---------- */
+.st-pos-open { background: #FFF4CC; color: #7A5B00; }
+.st-pos-closed, .st-pos-draft { background: #EEF0F3; color: #4B5563; }
+.st-pos-final, .st-resp-endorse { background: #E3F2EC; color: #0b6e4f; }
+.st-pos-withdrawn, .st-resp-opt_out { background: #FBE7E5; color: #A3261A; }
+.st-resp-no_response, .st-resp-withdrawn { background: #EEF0F3; color: #4B5563; }
+.wrap-row { flex-wrap: wrap; gap: 8px; }

@@ -254,6 +254,7 @@ function wireLinkForm(id, next) {
     panel.querySelector('[data-change]').onclick = () => { panel.remove(); form.hidden = false; };
   };
 }
+const takeAfterLogin = () => { try { const h = localStorage.getItem('aimoc_after_login'); localStorage.removeItem('aimoc_after_login'); return /^#\/portal\/position\/[0-9a-f-]{36}$/.test(h || '') ? h : null; } catch { return null; } };
 async function signOut() { await sb.auth.signOut(); S.session = null; await afterLogin(); location.hash = '#/'; }
 
 /* ---------------- router ---------------- */
@@ -327,7 +328,7 @@ async function init() {
   await Promise.all([loadSettings(), loadNav(), afterLogin()]);
 
   if (BOOT.fromLink || BOOT.next) {
-    const nextHash = { join: '#/join', admin: '#/admin', portal: '#/portal' }[BOOT.next] || (BOOT.fromLink ? (isStaffUser() ? '#/admin' : '#/portal') : null);
+    const nextHash = (BOOT.fromLink && takeAfterLogin()) || { join: '#/join', admin: '#/admin', portal: '#/portal' }[BOOT.next] || (BOOT.fromLink ? (isStaffUser() ? '#/admin' : '#/portal') : null);
     const keepHash = BOOT.notice ? '#/login' : nextHash;
     history.replaceState(null, '', location.pathname + (keepHash || location.hash || '#/'));
   }
@@ -340,7 +341,7 @@ async function init() {
     setTimeout(async () => {
       await afterLogin();
       renderChrome();
-      if (event === 'SIGNED_IN' && /^#\/login/.test(location.hash)) go(isStaffUser() ? '#/admin' : '#/portal');
+      if (event === 'SIGNED_IN' && /^#\/login/.test(location.hash)) go(takeAfterLogin() || (isStaffUser() ? '#/admin' : '#/portal'));
       if (event === 'SIGNED_OUT') router();
     }, 0);
   });

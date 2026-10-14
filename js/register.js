@@ -393,9 +393,11 @@ route(/^#\/portal$/, async () => {
          <p class="muted small">If someone registered your organisation and listed you as a contact, make sure you logged in with that same email address.</p>
          <a class="btn" href="#/join">Register an organisation</a></div>`}
       ${mine.length ? '<p><a href="#/join">+ Register another organisation</a></p>' : ''}
+      <div id="portalPositions"></div>
       <p><button class="btn ghost" id="logout" type="button">Log out</button></p>
     </section>`);
   $('#logout').onclick = signOut;
+  drawPortalPositions().catch(console.error);
   $$('[data-pref]').forEach(cb => cb.onchange = async () => {
     const { error } = await sb.from('contacts').update({ receive_council_comms: cb.checked }).eq('id', cb.dataset.pref);
     if (error) { cb.checked = !cb.checked; return fail(error); }
