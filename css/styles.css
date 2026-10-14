@@ -449,3 +449,8 @@ body.admin-mode { background: var(--bg-soft); }
 .st-pos-withdrawn, .st-resp-opt_out { background: #FBE7E5; color: #A3261A; }
 .st-resp-no_response, .st-resp-withdrawn { background: #EEF0F3; color: #4B5563; }
 .wrap-row { flex-wrap: wrap; gap: 8px; }
+
+/* ---------- login box ---------- */
+.auth-box .auth-tabs { margin: -4px 0 14px; }
+.auth-box .auth-tabs button { flex: 1; }
+.auth-box .form { gap: 12px; }

@@ -8,10 +8,10 @@ const BOOT = (() => {
   const hash = location.hash;
   const qs = new URLSearchParams(location.search);
   const hp = new URLSearchParams(hash.replace(/^#\/?/, ''));
-  const r = { fromLink: /access_token=/.test(hash), next: qs.get('next'), notice: null };
+  const r = { fromLink: /access_token=/.test(hash), recovery: hp.get('type') === 'recovery', next: qs.get('next'), notice: null };
   if (hp.get('error_description')) {
     r.notice = hp.get('error_code') === 'otp_expired'
-      ? 'That link has expired or was already used. Send yourself a new one below.'
+      ? 'That link has expired or was already used. Log in, or use Forgot password to get a new one.'
       : hp.get('error_description');
     history.replaceState(null, '', location.pathname + '#/login');
   }
@@ -188,71 +188,113 @@ const staffRole = () => (S.staff?.active ? S.staff.role : null);
 const canAdmin = () => ['super_admin', 'council_admin'].includes(staffRole());
 const isSuper = () => staffRole() === 'super_admin';
 
-/* ---------------- magic-link login + resend ---------------- */
+/* ---------------- email + password login ---------------- */
+const MIN_PW = 8;
 function friendlyAuthError(err) {
   const m = errMsg(err);
   const secs = m.match(/after (\d+) seconds?/i);
-  if (secs || /rate limit|security purposes/i.test(m)) return `Please wait ${secs ? secs[1] + ' seconds' : 'a moment'} before requesting another link.`;
+  if (secs || /rate limit|security purposes/i.test(m)) return `Please wait ${secs ? secs[1] + ' seconds' : 'a moment'} and try again.`;
+  if (/invalid login credentials/i.test(m)) return 'Email or password is incorrect.';
+  if (/email not confirmed/i.test(m)) return 'Please confirm your email address first — check your inbox for the confirmation email.';
   if (/invalid.*email|email.*invalid/i.test(m)) return `That email address doesn't look right.`;
+  if (/password.*(short|least|characters)|weak/i.test(m)) return `Choose a password of at least ${MIN_PW} characters.`;
+  if (/same.*password|different from the old/i.test(m)) return 'Choose a password different from your current one.';
   return esc(m);
 }
-function requestLink(email, next) {
-  const back = location.origin + location.pathname + (next ? `?next=${encodeURIComponent(next)}` : '');
-  return sb.auth.signInWithOtp({ email, options: { emailRedirectTo: back, shouldCreateUser: true } });
-}
-function startCooldown(btn, secs = 60) {
+const authBack = next => location.origin + location.pathname + (next ? `?next=${encodeURIComponent(next)}` : '');
+function startCooldown(btn, secs = 60, label = 'Resend email') {
   let n = secs; btn.disabled = true;
   const tick = () => {
     if (!btn.isConnected) return;
-    if (n <= 0) { btn.disabled = false; btn.textContent = 'Resend link'; return; }
-    btn.textContent = `Resend link (${n}s)`; n--; setTimeout(tick, 1000);
+    if (n <= 0) { btn.disabled = false; btn.textContent = label; return; }
+    btn.textContent = `${label} (${n}s)`; n--; setTimeout(tick, 1000);
   };
   tick();
 }
-/** Renders an email → magic link form with "check inbox" + resend. */
-function linkFormHtml({ id = 'linkForm', button = 'Email me a secure link', notice = '' } = {}) {
-  let last = ''; try { last = localStorage.getItem('aimoc_last_email') || ''; } catch {}
-  return `<div class="link-box">${notice ? `<p class="notice err">${esc(notice)}</p>` : ''}
-    <form id="${id}" class="form card">
-      ${field('Email address', `<input name="email" type="email" required autocomplete="email" value="${esc(last)}">`)}
-      <button class="btn" type="submit">${esc(button)}</button>
-      <p class="hint">No password needed — we'll email you a secure one-time link.</p>
-    </form></div>`;
+const lastEmail = () => { try { return localStorage.getItem('aimoc_last_email') || ''; } catch { return ''; } };
+const rememberEmail = e => { try { localStorage.setItem('aimoc_last_email', e); } catch {} };
+
+/** Log in / create account / forgot password, in one box. mode: 'login' | 'signup' */
+function authFormHtml({ id = 'authBox', mode = 'login', notice = '' } = {}) {
+  return `<div class="card auth-box" id="${id}" data-mode="${mode}">
+    ${notice ? `<p class="notice err">${esc(notice)}</p>` : ''}
+    <div class="tabs auth-tabs" role="tablist"><button type="button" data-am="login">Log in</button><button type="button" data-am="signup">Create account</button></div>
+    <form class="form" novalidate>
+      <div class="form-error" hidden></div>
+      ${field('Email address', `<input name="email" type="email" required autocomplete="email" value="${esc(lastEmail())}">`)}
+      <div data-only="login signup">${field('Password', `<input name="password" type="password" required minlength="${MIN_PW}" autocomplete="current-password">`, '<span data-only="signup">At least ' + MIN_PW + ' characters.</span>')}</div>
+      <div data-only="signup">${field('Confirm password', '<input name="password2" type="password" autocomplete="new-password">')}</div>
+      <label class="check small" data-only="login signup"><input type="checkbox" data-showpw> <span>Show password</span></label>
+      <button class="btn" type="submit"></button>
+      <p class="small" data-only="login"><button class="linklike" type="button" data-am="forgot">Forgot password?</button></p>
+      <p class="small muted" data-only="login">Logged in before with an email link? Use <strong>Forgot password</strong> to set a password.</p>
+      <p class="small" data-only="forgot"><button class="linklike" type="button" data-am="login">← Back to log in</button></p>
+    </form>
+  </div>`;
 }
-function wireLinkForm(id, next) {
-  const form = $('#' + id); if (!form) return;
-  const send = async email => requestLink(email, next);
+function wireAuthForm(id = 'authBox', next = null) {
+  const box = $('#' + id); if (!box) return;
+  const form = $('form', box), errBox = $('.form-error', form), btn = $('button[type=submit]', form);
+  const LABEL = { login: 'Log in', signup: 'Create account', forgot: 'Email me a reset link' };
+  const setMode = m => {
+    box.dataset.mode = m;
+    $$('[data-only]', box).forEach(el => { el.hidden = !el.dataset.only.split(' ').includes(m); });
+    $$('.auth-tabs [data-am]', box).forEach(b => b.classList.toggle('active', b.dataset.am === m || (m === 'forgot' && b.dataset.am === 'login')));
+    form.password.autocomplete = m === 'signup' ? 'new-password' : 'current-password';
+    btn.textContent = LABEL[m]; errBox.hidden = true;
+  };
+  $$('[data-am]', box).forEach(b => b.onclick = () => setMode(b.dataset.am));
+  $('[data-showpw]', box).onchange = e => { form.password.type = form.password2.type = e.target.checked ? 'text' : 'password'; };
+  const showErr = html => { errBox.innerHTML = html; errBox.hidden = false; };
+  const sentPanel = (title, html, resend) => {
+    form.hidden = true; $('.auth-tabs', box).hidden = true;
+    const p = document.createElement('div'); p.className = 'sent';
+    p.innerHTML = `<div class="sent-icon" aria-hidden="true">✉</div><h2>${title}</h2>${html}
+      <p class="hint">Not there after a minute? Check spam or junk.</p>
+      <div class="row center"><button class="btn ghost" type="button" data-resend>Resend email</button></div><p class="small" data-msg></p>
+      <button class="linklike small" type="button" data-back>← Back to log in</button>`;
+    box.append(p);
+    const rb = $('[data-resend]', p); startCooldown(rb);
+    rb.onclick = async () => { rb.disabled = true; const { error } = await resend(); $('[data-msg]', p).innerHTML = error ? `<span class="bad">${friendlyAuthError(error)}</span>` : '<span class="good">Sent again — use the newest email.</span>'; startCooldown(rb); };
+    $('[data-back]', p).onclick = () => { p.remove(); form.hidden = false; $('.auth-tabs', box).hidden = false; setMode('login'); };
+  };
   form.onsubmit = async e => {
     e.preventDefault();
-    const email = form.email.value.trim().toLowerCase();
-    const btn = form.querySelector('button[type=submit]'); const label = btn.textContent;
-    btn.disabled = true; btn.textContent = 'Sending…';
-    const { error } = await send(email);
-    btn.disabled = false; btn.textContent = label;
-    if (error) { form.querySelector('.form-error')?.remove(); form.insertAdjacentHTML('afterbegin', `<p class="form-error">${friendlyAuthError(error)}</p>`); return; }
-    try { localStorage.setItem('aimoc_last_email', email); } catch {}
-    form.hidden = true;
-    const panel = document.createElement('div');
-    panel.className = 'card sent';
-    panel.innerHTML = `<div class="sent-icon" aria-hidden="true">✉</div><h2>Check your inbox</h2>
-      <p>We've sent a secure link to <strong>${esc(email)}</strong>.</p>
-      <p class="hint">The link expires in 1 hour. Not there after a minute? Check spam or junk.</p>
-      <div class="row center"><button class="btn ghost" type="button" data-resend>Resend link</button></div>
-      <p class="small" data-msg></p>
-      <button class="linklike small" type="button" data-change>Use a different email</button>`;
-    form.after(panel);
-    const rb = panel.querySelector('[data-resend]');
-    startCooldown(rb);
-    rb.onclick = async () => {
-      rb.disabled = true; rb.textContent = 'Sending…';
-      const { error } = await send(email);
-      const msg = panel.querySelector('[data-msg]');
-      if (error) { msg.innerHTML = `<span class="bad">${friendlyAuthError(error)}</span>`; rb.disabled = false; rb.textContent = 'Resend link'; return; }
-      msg.innerHTML = `<span class="good">New link sent — use the most recent email.</span>`;
-      startCooldown(rb);
-    };
-    panel.querySelector('[data-change]').onclick = () => { panel.remove(); form.hidden = false; };
+    const m = box.dataset.mode, email = form.email.value.trim().toLowerCase(), pw = form.password.value;
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return showErr(`That email address doesn't look right.`);
+    if (m !== 'forgot' && !pw) return showErr('Enter your password.');
+    if (m === 'signup') {
+      if (pw.length < MIN_PW) return showErr(`Choose a password of at least ${MIN_PW} characters.`);
+      if (pw !== form.password2.value) return showErr(`The two passwords don't match.`);
+    }
+    rememberEmail(email);
+    btn.disabled = true; const label = btn.textContent; btn.textContent = 'Please wait…';
+    try {
+      if (m === 'login') {
+        const { data, error } = await sb.auth.signInWithPassword({ email, password: pw });
+        if (error) {
+          if (/email not confirmed/i.test(errMsg(error))) return sentPanel('Confirm your email', `<p>Your account isn't confirmed yet. We've sent a confirmation link to <strong>${esc(email)}</strong>.</p>`, () => sb.auth.resend({ type: 'signup', email, options: { emailRedirectTo: authBack(next) } }));
+          return showErr(friendlyAuthError(error));
+        }
+        S.session = data.session; await afterLogin(); renderChrome();
+        go(takeAfterLogin() || (next === 'join' ? '#/join' : isStaffUser() ? '#/admin' : '#/portal'));
+      } else if (m === 'signup') {
+        const { data, error } = await sb.auth.signUp({ email, password: pw, options: { emailRedirectTo: authBack(next) } });
+        if (error) return showErr(friendlyAuthError(error));
+        if (data.session) { S.session = data.session; await afterLogin(); renderChrome(); return go(next === 'join' ? '#/join' : '#/portal'); }
+        sentPanel('Confirm your email', `<p>We've sent a confirmation link to <strong>${esc(email)}</strong>. Click it to finish creating your account.</p>
+          <p class="small muted">Already have an account with this email? Go back and log in, or use Forgot password.</p>`,
+          () => sb.auth.resend({ type: 'signup', email, options: { emailRedirectTo: authBack(next) } }));
+      } else {
+        const send = () => sb.auth.resetPasswordForEmail(email, { redirectTo: authBack() });
+        const { error } = await send();
+        if (error) return showErr(friendlyAuthError(error));
+        sentPanel('Check your inbox', `<p>If <strong>${esc(email)}</strong> has an account, we've sent a link to set a new password.</p>`, send);
+      }
+    } catch (err) { showErr(friendlyAuthError(err)); }
+    finally { if (btn.isConnected) { btn.disabled = false; btn.textContent = label; } }
   };
+  setMode(box.dataset.mode);
 }
 const takeAfterLogin = () => { try { const h = localStorage.getItem('aimoc_after_login'); localStorage.removeItem('aimoc_after_login'); return /^#\/portal\/position\/[0-9a-f-]{36}$/.test(h || '') ? h : null; } catch { return null; } };
 async function signOut() { await sb.auth.signOut(); S.session = null; await afterLogin(); location.hash = '#/'; }
@@ -328,7 +370,7 @@ async function init() {
   await Promise.all([loadSettings(), loadNav(), afterLogin()]);
 
   if (BOOT.fromLink || BOOT.next) {
-    const nextHash = (BOOT.fromLink && takeAfterLogin()) || { join: '#/join', admin: '#/admin', portal: '#/portal' }[BOOT.next] || (BOOT.fromLink ? (isStaffUser() ? '#/admin' : '#/portal') : null);
+    const nextHash = (BOOT.recovery && '#/set-password') || (BOOT.fromLink && takeAfterLogin()) || { join: '#/join', admin: '#/admin', portal: '#/portal' }[BOOT.next] || (BOOT.fromLink ? (isStaffUser() ? '#/admin' : '#/portal') : null);
     const keepHash = BOOT.notice ? '#/login' : nextHash;
     history.replaceState(null, '', location.pathname + (keepHash || location.hash || '#/'));
   }
@@ -341,6 +383,7 @@ async function init() {
     setTimeout(async () => {
       await afterLogin();
       renderChrome();
+      if (event === 'PASSWORD_RECOVERY') return go('#/set-password');
       if (event === 'SIGNED_IN' && /^#\/login/.test(location.hash)) go(takeAfterLogin() || (isStaffUser() ? '#/admin' : '#/portal'));
       if (event === 'SIGNED_OUT') router();
     }, 0);

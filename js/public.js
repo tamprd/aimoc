@@ -220,10 +220,47 @@ route(/^#\/login$/, async () => {
   render(`<section class="wrap narrow page">
     <h1>Log in</h1>
     <p class="muted">For organisation representatives and Council administrators.</p>
-    ${linkFormHtml({ notice, button: notice ? 'Send a new link' : 'Email me a log-in link' })}
-    <p class="muted small">Not registered yet? <a href="#/join">Register your organisation</a></p>
+    ${authFormHtml({ notice })}
+    <p class="muted small">Registering an organisation? <a href="#/join">Start here</a></p>
   </section>`);
-  wireLinkForm('linkForm', null);
+  wireAuthForm();
+});
+
+/* ---------------- set / change password ---------------- */
+route(/^#\/set-password$/, async () => {
+  if (!S.session) return go('#/login');
+  render(`<section class="wrap narrow page">
+    <h1>Set your password</h1>
+    <p class="muted">For <strong>${esc(S.session.user.email)}</strong>. You'll use this with your email address to log in.</p>
+    <form class="card form" id="spf" novalidate>
+      <div class="form-error" hidden></div>
+      ${field('New password', `<input name="pw" type="password" autocomplete="new-password" minlength="${MIN_PW}" required>`, `At least ${MIN_PW} characters.`)}
+      ${field('Confirm new password', '<input name="pw2" type="password" autocomplete="new-password" required>')}
+      <div id="spCode" hidden>${field('Authenticator code', '<input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6">', 'Admins: enter the 6-digit code from your authenticator app.')}</div>
+      <button class="btn" type="submit">Save password</button>
+    </form></section>`);
+  const f = $('#spf'), err = $('.form-error', f);
+  const show = m => { err.innerHTML = m; err.hidden = false; };
+  f.onsubmit = async e => {
+    e.preventDefault(); err.hidden = true;
+    if (f.pw.value.length < MIN_PW) return show(`Choose a password of at least ${MIN_PW} characters.`);
+    if (f.pw.value !== f.pw2.value) return show(`The two passwords don't match.`);
+    const btn = $('button[type=submit]', f); btn.disabled = true;
+    try {
+      if (!$('#spCode').hidden) {
+        const { data } = await sb.auth.mfa.listFactors();
+        const fac = (data?.totp || []).find(x => x.status === 'verified');
+        if (fac) { const { error } = await sb.auth.mfa.challengeAndVerify({ factorId: fac.id, code: f.code.value.trim() }); if (error) return show(`That code didn't work — try the newest code.`); }
+      }
+      const { error } = await sb.auth.updateUser({ password: f.pw.value });
+      if (error) {
+        if (/aal2|AAL2|mfa/i.test(errMsg(error))) { $('#spCode').hidden = false; f.code.focus(); return show('Enter your authenticator code to confirm this change.'); }
+        return show(friendlyAuthError(error));
+      }
+      toast('Password saved');
+      await afterLogin(); go(isStaffUser() ? '#/admin' : '#/portal');
+    } finally { btn.disabled = false; }
+  };
 });
 
 /* ---------------- unsubscribe ---------------- */

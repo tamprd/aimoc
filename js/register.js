@@ -36,11 +36,11 @@ route(/^#\/join$/, async () => {
           </ul>
         </div>
         <div>
-          <h2 class="sec">Step 1 — verify your email</h2>
-          <p class="muted small">Use the email address you want AIMOC to contact you on as lead contact.</p>
-          ${linkFormHtml({ button: 'Send verification link' })}
+          <h2 class="sec">Step 1 — create your login</h2>
+          <p class="muted small">Use the email address you want AIMOC to contact you on as lead contact. Already have a login? Choose Log in.</p>
+          ${authFormHtml({ mode: 'signup' })}
         </div>
-      </section>`), wireLinkForm('linkForm', 'join');
+      </section>`), wireAuthForm('authBox', 'join');
   }
   await loadLookups();
   try { const saved = JSON.parse(localStorage.getItem(regKey()) || 'null'); if (saved?.R) { R = saved.R; regStep = saved.regStep || 0; } } catch {}
@@ -394,7 +394,7 @@ route(/^#\/portal$/, async () => {
          <a class="btn" href="#/join">Register an organisation</a></div>`}
       ${mine.length ? '<p><a href="#/join">+ Register another organisation</a></p>' : ''}
       <div id="portalPositions"></div>
-      <p><button class="btn ghost" id="logout" type="button">Log out</button></p>
+      <p class="row"><a class="btn ghost" href="#/set-password">Change password</a><button class="btn ghost" id="logout" type="button">Log out</button></p>
     </section>`);
   $('#logout').onclick = signOut;
   drawPortalPositions().catch(console.error);
